@@ -1,36 +1,126 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# EchoBrief
+
+EchoBrief is a simple AI-powered voice note tool that turns messy audio into clean, readable, AI-ready text.
+
+It lets you upload multiple voice notes, arrange them in the correct order, and process them into transcripts, English translations, summaries, action items, deadlines, and important details.
+
+## Features
+
+- Upload multiple audio files
+- Manually arrange voice notes in the correct order
+- Supports common audio formats like MP3, WAV, M4A, WEBM, OGG, and OPUS
+- Converts WhatsApp-style OGG/OPUS voice notes using FFmpeg
+- Uses Gemini API for audio analysis and transcription
+- Generates:
+  - Raw transcript
+  - Clean transcript
+  - English translation
+  - Summary
+  - Action items
+  - Deadlines
+  - Important details
+  - Unclear parts
+- Copy output to clipboard
+- Download AI-ready output as a TXT file
+
+## Tech Stack
+
+- Next.js
+- TypeScript
+- Tailwind CSS
+- Gemini API
+- FFmpeg
+- fluent-ffmpeg
+- ffmpeg-static
 
 ## Getting Started
 
-First, run the development server:
+### 1. Clone the repository
 
 ```bash
+git clone https://github.com/YOUR_USERNAME/echobrief.git
+cd echobrief
+2. Install dependencies
+npm install
+3. Set up environment variables
+
+Create a .env.local file in the root directory:
+
+GEMINI_API_KEY=your_gemini_api_key_here
+GEMINI_MODEL=gemini-2.5-flash
+
+You can get a Gemini API key from Google AI Studio.
+
+4. Run the development server
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Then open:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+http://localhost:3000
+How It Works
+The user uploads one or more audio files.
+The user arranges the files in the correct listening order.
+EchoBrief sends the files to the backend.
+OGG/OPUS files are converted to MP3 using FFmpeg.
+The processed audio is sent to Gemini.
+Gemini returns structured output.
+EchoBrief displays the transcript, summary, translation, tasks, deadlines, and important details.
+Supported Audio Formats
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+EchoBrief is designed to support:
 
-## Learn More
+.mp3
+.wav
+.m4a
+.webm
+.ogg
+.opus
 
-To learn more about Next.js, take a look at the following resources:
+OGG and OPUS files are converted before being sent to Gemini.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Project Structure
+echobrief/
+├── app/
+│   ├── api/
+│   │   └── process-audio/
+│   │       └── route.ts
+│   ├── page.tsx
+│   └── layout.tsx
+├── public/
+├── .env.example
+├── .gitignore
+├── package.json
+└── README.md
+Environment Variables
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Create a .env.local file:
 
-## Deploy on Vercel
+GEMINI_API_KEY=your_gemini_api_key_here
+GEMINI_MODEL=gemini-2.5-flash
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Do not commit .env.local to GitHub.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+You can also create a safe .env.example file:
+
+GEMINI_API_KEY=your_gemini_api_key_here
+GEMINI_MODEL=gemini-2.5-flash
+
+Notes
+This project is currently built as a local MVP.
+Uploaded files are temporarily processed by the backend.
+API keys should always be stored in environment variables.
+Large audio files may take longer to process.
+Multi-file processing depends on the order selected by the user before clicking Process Audio.
+Future Improvements
+Drag-and-drop file ordering
+Progress indicator for each file
+DOCX export
+PDF export
+Speaker detection
+Timestamped transcripts
+Saved transcript history
+Authentication
+Cloud storage support
+License
+
+This project is for personal and educational use.
