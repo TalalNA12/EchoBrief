@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 type EchoBriefOutput = {
+  mode?: "notes" | "timestamps";
   rawTranscript: string;
   cleanTranscript: string;
   englishTranslation: string;
@@ -11,6 +12,7 @@ type EchoBriefOutput = {
   deadlines: string[];
   importantDetails: string[];
   unclearParts: string[];
+  timestampedTranscript?: string;
 };
 
 export default function Home() {
@@ -18,6 +20,7 @@ export default function Home() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [output, setOutput] = useState<EchoBriefOutput | null>(null);
   const [error, setError] = useState("");
+  const [mode, setMode] = useState<"notes" | "timestamps">("notes");
 
   function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
     const selectedFiles = Array.from(event.target.files || []);
@@ -74,6 +77,8 @@ export default function Home() {
       files.forEach((file) => {
         formData.append("files", file);
       });
+
+      formData.append("mode", mode);
 
       const response = await fetch("/api/process-audio", {
         method: "POST",
@@ -160,12 +165,12 @@ ${output.unclearParts.map((item, index) => `${index + 1}. ${item}`).join("\n")}
             <span className="text-lg font-medium">Upload voice notes</span>
 
             <span className="mt-2 text-sm text-zinc-400">
-              Supports mp3, wav, m4a, webm, ogg, and opus
+              Supports mp3, wav, m4a, webm, ogg, opus, mp4, mov, and mkv
             </span>
 
             <input
               type="file"
-              accept="audio/*,.ogg,.opus"
+              accept="audio/*,video/*,.ogg,.opus,.mp4,.mov,.mkv"
               multiple
               onChange={handleFileChange}
               className="hidden"
@@ -234,6 +239,37 @@ ${output.unclearParts.map((item, index) => `${index + 1}. ${item}`).join("\n")}
             </div>
           )}
 
+          <div className="mt-6 grid gap-3 sm:grid-cols-2">
+            <button
+              type="button"
+              onClick={() => setMode("notes")}
+              className={`rounded-2xl border px-4 py-4 text-left transition ${mode === "notes"
+                ? "border-cyan-400 bg-cyan-950/40 text-cyan-200"
+                : "border-zinc-800 bg-zinc-950 text-zinc-300 hover:border-zinc-600"
+                }`}
+            >
+              <p className="font-semibold">Notes Mode</p>
+              <p className="mt-1 text-sm text-zinc-400">
+                Best for voice notes, summaries, translations, and action
+                items.
+              </p>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setMode("timestamps")}
+              className={`rounded-2xl border px-4 py-4 text-left transition ${mode === "timestamps"
+                ? "border-cyan-400 bg-cyan-950/40 text-cyan-200"
+                : "border-zinc-800 bg-zinc-950 text-zinc-300 hover:border-zinc-600"
+                }`}
+            >
+              <p className="font-semibold">Timestamp Mode</p>
+              <p className="mt-1 text-sm text-zinc-400">
+                Best for YouTube editing. Outputs sentence-by-sentence timestamps.
+              </p>
+            </button>
+          </div>
+
           {error && (
             <p className="mt-4 rounded-xl border border-red-900 bg-red-950/50 px-4 py-3 text-sm text-red-200">
               {error}
@@ -278,6 +314,14 @@ ${output.unclearParts.map((item, index) => `${index + 1}. ${item}`).join("\n")}
                 </button>
               </div>
             </div>
+
+            {output.mode === "timestamps" && output.timestampedTranscript && (
+              <OutputCard
+                title="Timestamped Transcript"
+                content={output.timestampedTranscript}
+                onCopy={() => copyText(output.timestampedTranscript || "")}
+              />
+            )}
 
             <OutputCard
               title="Summary"

@@ -14,6 +14,7 @@ export const runtime = "nodejs";
 export const maxDuration = 300;
 
 type EchoBriefOutput = {
+  mode?: "notes" | "timestamps";
   rawTranscript: string;
   cleanTranscript: string;
   englishTranslation: string;
@@ -22,6 +23,7 @@ type EchoBriefOutput = {
   deadlines: string[];
   importantDetails: string[];
   unclearParts: string[];
+  timestampedTranscript?: string;
 };
 
 const ai = new GoogleGenAI({
@@ -50,6 +52,9 @@ export async function POST(request: NextRequest) {
 
     const formData = await request.formData();
     const uploadedFiles = formData.getAll("files");
+    const modeValue = formData.get("mode");
+    const mode: "notes" | "timestamps" =
+      modeValue === "timestamps" ? "timestamps" : "notes";
 
     const audioFiles = uploadedFiles.filter(
       (file): file is File => file instanceof File
@@ -78,7 +83,7 @@ export async function POST(request: NextRequest) {
 
       await writeFile(inputPath, buffer);
 
-      const preparedAudioPath = await prepareAudioForGemini(inputPath, file.name);
+      const preparedAudioPath = await prepareMediaForGemini(inputPath, file.name);
       const mimeType = getMimeType(preparedAudioPath);
 
       const geminiOutput = await analyzeAudioWithGemini({
@@ -87,6 +92,7 @@ export async function POST(request: NextRequest) {
         originalFilename: file.name,
         fileNumber: index + 1,
         totalFiles: audioFiles.length,
+        mode,
       });
 
       perFileOutputs.push(geminiOutput);
@@ -120,12 +126,14 @@ async function analyzeAudioWithGemini({
   originalFilename,
   fileNumber,
   totalFiles,
+  mode,
 }: {
   audioPath: string;
   mimeType: string;
   originalFilename: string;
   fileNumber: number;
   totalFiles: number;
+  mode: "notes" | "timestamps";
 }): Promise<EchoBriefOutput> {
   const uploadedFile = await ai.files.upload({
     file: audioPath,
@@ -139,7 +147,60 @@ async function analyzeAudioWithGemini({
     throw new Error("Gemini file upload failed.");
   }
 
-  const prompt = `
+  const prompt =
+    mode === "timestamps"
+      ? `
+You are EchoBrief, a timestamped transcription assistant for YouTube video editing.
+
+Analyze this audio file.
+
+Context:
+- This is file ${fileNumber} of ${totalFiles}.
+- Original filename: ${originalFilename}.
+- The audio may contain English, Urdu, Hindi, Punjabi, or mixed languages.
+
+Return valid JSON only.
+
+Use exactly this JSON shape:
+{
+  "mode": "timestamps",
+  "rawTranscript": "",
+  "cleanTranscript": "",
+  "englishTranslation": "",
+  "summary": "",
+  "actionItems": [],
+  "deadlines": [],
+  "importantDetails": [],
+  "unclearParts": [],
+  "timestampedTranscript": ""
+}
+
+Timestamp rules:
+- timestampedTranscript must be sentence-by-sentence.
+- Use this exact format:
+[00:00] - [00:05] Sentence here.
+[00:05] - [00:11] Next sentence here.
+- Use MM:SS format.
+- Each line should be one complete sentence or one natural spoken phrase.
+- Keep timestamps as accurate as possible.
+- If exact timing is uncertain, estimate based on the audio.
+- Do not group the entire transcript under one timestamp.
+- This output is for video editing, so line breaks must be clean and useful.
+
+Content rules:
+- rawTranscript should stay close to what was spoken.
+- cleanTranscript should be readable, punctuated, and organized into paragraphs.
+- englishTranslation should translate the full meaning into clear English. If already English, rewrite it clearly in English.
+- summary should briefly summarize the video/audio content.
+- actionItems should contain clear tasks only.
+- deadlines should include any date, day, time, deadline, meeting time, or timing mentioned.
+- importantDetails should include names, places, requirements, instructions, or constraints.
+- unclearParts should mention anything hard to understand or uncertain.
+- Do not invent details.
+- Do not include markdown.
+- Do not wrap the JSON in triple backticks.
+`
+      : `
 You are EchoBrief, an audio-to-readable-notes assistant.
 
 Analyze this audio file.
@@ -153,6 +214,7 @@ Return valid JSON only.
 
 Use exactly this JSON shape:
 {
+  "mode": "notes",
   "rawTranscript": "",
   "cleanTranscript": "",
   "englishTranslation": "",
@@ -160,7 +222,8 @@ Use exactly this JSON shape:
   "actionItems": [],
   "deadlines": [],
   "importantDetails": [],
-  "unclearParts": []
+  "unclearParts": [],
+  "timestampedTranscript": ""
 }
 
 Rules:
@@ -172,6 +235,7 @@ Rules:
 - deadlines should include any date, day, time, submission deadline, meeting time, or timing mentioned.
 - importantDetails should include names, places, requirements, instructions, or constraints.
 - unclearParts should mention anything hard to understand or uncertain.
+- timestampedTranscript should be empty in notes mode.
 - Do not invent details.
 - Do not include markdown.
 - Do not wrap the JSON in triple backticks.
@@ -211,6 +275,7 @@ function parseGeminiJson(text: string): EchoBriefOutput {
   }
 
   return {
+    mode: parsed.mode === "timestamps" ? "timestamps" : "notes",
     rawTranscript: String(parsed.rawTranscript || ""),
     cleanTranscript: String(parsed.cleanTranscript || ""),
     englishTranslation: String(parsed.englishTranslation || ""),
@@ -219,6 +284,7 @@ function parseGeminiJson(text: string): EchoBriefOutput {
     deadlines: normalizeStringArray(parsed.deadlines),
     importantDetails: normalizeStringArray(parsed.importantDetails),
     unclearParts: normalizeStringArray(parsed.unclearParts),
+    timestampedTranscript: String(parsed.timestampedTranscript || ""),
   };
 }
 
@@ -231,7 +297,12 @@ function normalizeStringArray(value: unknown): string[] {
 }
 
 function mergeOutputs(outputs: EchoBriefOutput[]): EchoBriefOutput {
+  const mode = outputs.some((output) => output.mode === "timestamps")
+    ? "timestamps"
+    : "notes";
+
   return {
+    mode,
     rawTranscript: outputs
       .map((output, index) => `File ${index + 1}\n${output.rawTranscript}`)
       .join("\n\n"),
@@ -256,26 +327,55 @@ function mergeOutputs(outputs: EchoBriefOutput[]): EchoBriefOutput {
     unclearParts: outputs.flatMap((output, index) =>
       output.unclearParts.map((item) => `File ${index + 1}: ${item}`)
     ),
+    timestampedTranscript: outputs
+      .map((output, index) =>
+        output.timestampedTranscript
+          ? `File ${index + 1}\n${output.timestampedTranscript}`
+          : ""
+      )
+      .filter(Boolean)
+      .join("\n\n"),
   };
 }
 
-async function prepareAudioForGemini(
+async function prepareMediaForGemini(
   inputPath: string,
   originalFilename: string
 ): Promise<string> {
   const extension = path.extname(originalFilename).toLowerCase();
 
-  const needsConversion = [".ogg", ".opus"].includes(extension);
+  const needsAudioConversion = [".ogg", ".opus"].includes(extension);
+  const needsVideoExtraction = [".mp4", ".mov", ".mkv"].includes(extension);
 
-  if (!needsConversion) {
-    return inputPath;
+  if (needsVideoExtraction) {
+    const outputPath = inputPath.replace(extension, ".mp3");
+    await extractMp3FromVideo(inputPath, outputPath);
+    return outputPath;
   }
 
-  const outputPath = inputPath.replace(extension, ".mp3");
+  if (needsAudioConversion) {
+    const outputPath = inputPath.replace(extension, ".mp3");
+    await convertAudioToMp3(inputPath, outputPath);
+    return outputPath;
+  }
 
-  await convertAudioToMp3(inputPath, outputPath);
+  return inputPath;
+}
 
-  return outputPath;
+function extractMp3FromVideo(
+  inputPath: string,
+  outputPath: string
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    ffmpeg(inputPath)
+      .noVideo()
+      .audioCodec("libmp3lame")
+      .audioBitrate("128k")
+      .format("mp3")
+      .on("end", () => resolve())
+      .on("error", (error) => reject(error))
+      .save(outputPath);
+  });
 }
 
 function convertAudioToMp3(inputPath: string, outputPath: string): Promise<void> {
